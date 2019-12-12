@@ -137,8 +137,48 @@ options(scipen = 999)
 ###            Compare delineated watershed boundaries          ###
 ###################################################################
     
+    # Load boundaries from WQAL (Michelle Shattuck):
+    ws.dat <- data.frame(site = nhdhr.dat$site,
+                         TotArea_km2_wqal = NA,
+                         TotArea_km2_streamstats = NA)
     
+    for(i in 1:length(nhdhr.dat$site)){
+  
+      ## 1. WQAL
+        ## Load shapefile:
+        # unzip folder that houses the site shapefile:
+        if(nhdhr.dat$site[i]!="Conn"){
+        unzip(paste("./data/watershed_boundaries/WQAL_Shattuck/",nhdhr.dat$site[i],"_shp.zip",sep=""), exdir = "./data/watershed_boundaries/WQAL_Shattuck/")
+        # load shapefile:
+        wqal.shp <- st_read(paste("./data/watershed_boundaries/WQAL_Shattuck/",nhdhr.dat$site[i],".shp",sep="")) %>%
+                    st_transform(.,crs = 4269)
+        # remove files to save memory:
+        file.remove(grep(list.files(path="./data/watershed_boundaries/WQAL_Shattuck",full.names = T), pattern=".zip", inv=T, value=T),recursive=T)
+        
+        ## Calculate watershed area:
+        ws.dat[i,"TotArea_km2_wqal"] <- st_area(wqal.shp)/(10^6)
+      
+      
+        }
+      
+      ## 2. StreamStats
+        ## Load shapefile:
+        # unzip folder that houses the site shapefile:
+        unzip(paste("./data/watershed_boundaries/StreamStats/",nhdhr.dat$site[i],".zip",sep=""), exdir = "./data/watershed_boundaries/StreamStats/")
+        # load shapefile:
+        streamstats.shp <- st_read(paste("./data/watershed_boundaries/StreamStats/","globalwatershed.shp",sep="")) %>%
+                           st_transform(.,crs = 4269)
+        # remove files to save memory:
+        file.remove(grep(list.files(path="./data/watershed_boundaries/StreamStats",,full.names = T), pattern=".zip", inv=T, value=T),recursive=T)
+        
+        ## Calculate watershed area:
+        ws.dat[i,"TotArea_km2_streamstats"] <- st_area(streamstats.shp)/(10^6)
+        
+    print(i)
+        
+    }
     
+    print(ws.dat %>% as_tibble(.))
     
     
     
