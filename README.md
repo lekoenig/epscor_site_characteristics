@@ -8,7 +8,7 @@ The epscor_site_characteristics.R script will:
 - link each EPSCoR site to the nearest NHDV2 COMID and NHDHR NHDPlusID  
 - load watershed boundaries from UNH WQAL and USGS StreamStats  
 - calculate upstream watershed area  
-- estimate mean watershed slope and streambed slope  
+- estimate mean watershed slope and streambed slope from 10-m DEM, National Elevation Dataset (NED)  
 - summarize land use characteristics from the NLCD 2016 data set (https://www.mrlc.gov/data/nlcd-2016-land-cover-conus)  
 - summarize population density characteristics from the U.S. block-level population density dataset 2010 (https://www.sciencebase.gov/catalog/item/57753ebee4b07dd077c70868)  
   
