@@ -74,7 +74,7 @@
   }
   
   
-  ## Modify function above to match site with NHDHR data:
+## Modify function above to match site with NHDHR data:
   
   link_comid3 <-  function (points, CRS, maxDist){
     
@@ -125,3 +125,66 @@
 
     return(join.dat2)
   }
+  
+
+## Function to estimate river slope over a given river reach:
+  
+  est_slope <- function(site,nhdplusid,HRflowlines,reach.length,dem){
+    
+    site <- site %>% st_transform(.,crs=5070)
+    fromnode.up.fline <- HRflowlines$FromNode[which(HRflowlines$NHDPlusID == nhdplusid)]
+    up.fline.row <- which(HRflowlines$ToNode == fromnode.up.fline & HRflowlines$StreamOrde == HRflowlines$StreamOrde[which(HRflowlines$NHDPlusID == nhdplusid)])
+    rvr.reach <- HRflowlines[c(up.fline.row,which(HRflowlines$NHDPlusID == nhdplusid)),] %>% 
+                 st_transform(.,crs=5070) %>% st_zm(.,drop=TRUE,what="ZM")
+    
+    rvr.reach.pts <- st_sample(x=rvr.reach,type="regular",size=sum(as.numeric(st_length(rvr.reach)))) %>%
+                         st_cast(.,"POINT")
+    prox.node <- which.min(st_distance(site,rvr.reach.pts))
+    upstr.reach <- rvr.reach.pts[c(1:prox.node)] 
+    reach.sub <- upstr.reach[c(which.min(abs(reach.length - as.numeric(st_distance(site,upstr.reach)))):length(upstr.reach))]
+    
+    top.elev <- raster::extract(dem,reach.sub[1] %>% st_sf(.) %>% st_transform(.,crs=4269))
+    upstr.elev <- raster::extract(dem,reach.sub %>% st_sf(.) %>% st_transform(.,crs=4269))
+    site.elev <- raster::extract(dem, site %>% st_sf(.) %>% st_transform(.,crs=4269))
+    reach.length.meters <- as.numeric(st_distance(site,reach.sub[1]))
+    reach.slope <- (top.elev - site.elev)/reach.length.meters
+    reach.slope2 <- (max(upstr.elev) - site.elev)/reach.length.meters
+    reach.slope3 <- (max(upstr.elev) - min(upstr.elev))/reach.length.meters
+    return(reach.slope)
+    
+  }
+  
+  
+  est_slope_flowlines <- function(site,nhdplusid,flowlines,reach.length,dem){
+    
+    site <- site %>% st_transform(.,crs=5070)
+    flowlines <- flowlines %>% st_transform(.,crs=5070)
+    snap.fline <- sf::st_join(site,flowlines,sf::st_is_within_distance,dist=10)
+    joined.fline <- flowlines[which(flowlines$arcid %in% snap.fline$arcid),]
+    
+    near.flines <- flowlines[which(flowlines$arcid == 38151),]
+    near.flines.pts <- st_sample(x=near.flines,type="regular",size=sum(as.numeric(st_length(near.flines)))) %>% st_cast(.,"POINT")
+    
+    joined.fline.pts <- st_sample(x=joined.fline,type="regular",size=sum(as.numeric(st_length(joined.fline)))) %>% st_cast(.,"POINT")
+    prox.node <- which.min(st_distance(site,joined.fline.pts))
+    joined.fline.pts <- joined.fline.pts[c(prox.node:length(joined.fline.pts))]
+    
+    up.fline.pts <- c(near.flines.pts,joined.fline.pts)
+    
+    upstr.reach <- up.fline.pts
+
+    top.elev <- raster::extract(dem,upstr.reach[1] %>% st_sf(.) %>% st_transform(.,crs=4269))
+    upstr.elev <- raster::extract(dem,upstr.reach %>% st_sf(.) %>% st_transform(.,crs=4269))
+    site.elev <- raster::extract(dem, site %>% st_sf(.) %>% st_transform(.,crs=4269))
+    reach.length.meters <- as.numeric(st_distance(site,upstr.reach[1]))
+    reach.slope <- (top.elev - site.elev)/reach.length.meters
+    reach.slope2 <- (max(upstr.elev) - site.elev)/reach.length.meters
+    reach.slope3 <- (max(upstr.elev) - min(upstr.elev))/reach.length.meters
+    return(reach.slope)
+    
+  }
+  
+
+  
+  
+  

@@ -183,7 +183,7 @@ options(scipen = 999)
       unzip("./data/landuse/nlcd2016_vpu01.zip", exdir = "./data/landuse")
       # load raster:
       nlcd <- raster::raster("./data/landuse/nlcd2016_vpu01/nlcd2016_01.tif")
-      raster::plot(nlcd)
+      #raster::plot(nlcd)
       
     # Use FedData package to download NLCD land cover data:
       # load vpu01 boundary to use as a template for clipping conus-level land cover data:
@@ -199,6 +199,13 @@ options(scipen = 999)
       ##                 label = "vpu01",
       ##                 year = 2011)
     
+    # Load Pop density 2010 data:
+      unzip("./data/popden2010/pden2010_block_vpu01.zip", exdir = "./data/popden2010")
+      # load pop den raster:
+      pop.raster <- raster::raster("./data/popden2010/pden2010_block_vpu01/pden2010_60m.tif")
+      
+      
+
     for(i in 1:length(nhdhr.dat$site)){
   
       ## 1. WQAL
@@ -216,7 +223,7 @@ options(scipen = 999)
         ws.dat[i,"TotArea_km2_wqal"] <- st_area(wqal.shp)/(10^6)
         
         ## Calculate watershed elevation/topography data:
-        # load 1/3 arc-second elevation data from the National Elevation Dataset (NED):
+        # load 1/3 arc-second (~10 m) elevation data from the National Elevation Dataset (NED):
         ws.dem <- FedData::get_ned(template = wqal.shp,res = "13",
                                    label = as.character(nhdhr.dat$site[i]),
                                    raw.dir = "./data/RAW/NED",
@@ -230,12 +237,12 @@ options(scipen = 999)
         site.elev <- raster::extract(ws.dem,pt)
         
         # estimate streambed slope over a 200 m reach:
-         if(!is.na(nhdhr.dat$NHDPlusID[i])){
-         reach.slope <- est_slope(site = pt, nhdplusid = nhdhr.dat$NHDPlusID[i],
-                                HRflowlines = nhdhr_dataset,reach.length = 200, dem = ws.dem)
-         } else {
-         reach.slope <- NA
-         }
+        # if(!is.na(nhdhr.dat$NHDPlusID[i])){
+        # reach.slope <- est_slope(site = pt, nhdplusid = nhdhr.dat$NHDPlusID[i],
+        #                        HRflowlines = nhdhr_dataset,reach.length = 200, dem = ws.dem)
+        # } else {
+        # reach.slope <- NA
+        # }
     
         # remove files to save memory:
         unlink("./data/RAW", recursive = TRUE)  
@@ -243,8 +250,6 @@ options(scipen = 999)
         
         ws.dat[i,"mean.ws.slope.deg.wqal"] <- mean.ws.slope
         ws.dat[i,"site.elev.meters.wqal"] <- site.elev
-        ws.dat[i,"stream.slope"] <- reach.slope
-        
         
         ## Calculate mean watershed NLCD classes
         # Crop and mask nlcd raster before summarizing land cover data (don't actually need to crop raster if just tabulating areas):
@@ -268,10 +273,6 @@ options(scipen = 999)
         ws.dat[i,"nlcd2016_PctWetland_wqal"] <- sum(sum.lndcvr.wqal[which(colnames(sum.lndcvr.wqal) %in% c("90","95"))])*100
       
         ## Calculate mean population density for each watershed:
-        unzip("./data/popden2010/pden2010_block_vpu01.zip", exdir = "./data/popden2010")
-        # load pop den raster:
-        pop.raster <- raster::raster("./data/popden2010/pden2010_block/pden2010_60m.tif")
-        
         # Crop and mask pop density raster before summarizing pop density data (don't actually need to crop raster if just tabulating areas):
         pop.cr <- raster::crop(x = pop.raster, y = wqal.shp %>% st_transform(.,crs = st_crs(pop.raster)))
         pop.fr <- raster::rasterize(x = wqal.shp %>% st_transform(.,crs = st_crs(pop.raster)),y=pop.cr)
@@ -311,17 +312,32 @@ options(scipen = 999)
                                    extraction.dir = "./data/EXTRACTIONS/NED")
         # convert dem raster to slope raster:
         ws.slope <- raster::terrain(x = ws.dem, opt="slope", unit="degrees", neighbors=8)
+
         # get slope raster values and calculate mean
         mean.ws.slope <- raster::getValues(ws.slope) %>% mean(.,na.rm=T)
         # extract elevation at sample location:
         pt <- nhdhr.dat[i,] %>% st_as_sf(coords=c("Lon","Lat"),crs=4269)
         site.elev <- raster::extract(ws.dem,pt)
+        
+        # estimate streambed slope over a 200 m reach:
+        if(!is.na(nhdhr.dat$NHDPlusID[i])){
+          reach.slope <- est_slope(site = pt, nhdplusid = nhdhr.dat$NHDPlusID[i],
+                                   HRflowlines = nhdhr_dataset,reach.length = 200, dem = ws.dem)
+        } else if(nhdhr.dat$site[i] == "BDC"){
+          # Note that slope estimation along BDC flowline is pretty much manually calculated:
+          LMP.flowlines <- st_read("./data/flowlines/LMP/LMP_stream_network.shp") %>% st_transform(.,4269)
+          reach.slope <- est_slope_flowlines(site=pt,flowlines = LMP.flowlines,dem = ws.dem)
+        } else {
+          reach.slope <- NA
+        }
+        
         # remove files to save memory:
         unlink("./data/RAW", recursive = TRUE)  
         unlink("./data/EXTRACTIONS", recursive = TRUE)  
         
         ws.dat[i,"mean.ws.slope.deg.streamstats"] <- mean.ws.slope
         ws.dat[i,"site.elev.meters.streamstats"] <- site.elev
+        ws.dat[i,"stream.slope"] <- reach.slope
         
         ## Calculate mean watershed NLCD classes
         # Crop and mask nlcd raster before summarizing land cover data (don't actually need to crop raster if just tabulating areas):
@@ -369,6 +385,8 @@ options(scipen = 999)
     # Evaluate calculated watershed data and save to file:
     print(ws.dat %>% as_tibble(.))
     write.csv(ws.dat,"./output/epscor_landcover_compare.csv",row.names = FALSE)
+    
+    
     
     # remove extracted land use and pop density raster files to save memory:
     file.remove(grep(list.files(path="./data/landuse/nlcd2016_vpu01",full.names = T), pattern=".zip", inv=T, value=T),recursive=T)
